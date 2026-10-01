@@ -605,6 +605,10 @@ int a2e_cpu_step(a2e_cpu *cpu) {
     case 0x9A: tick1(cpu); cpu->sp = cpu->x; break;
     case 0x98: tick1(cpu); cpu->a = cpu->y; set_zn(cpu, cpu->a); break;
 
+    /* ---- WAI / STP (65C02 / WDC) ---- */
+    case 0xCB: /* WAI */ if (cpu->is_65c02) { tick1(cpu); cpu->waiting = true; } else tick1(cpu); break;
+    case 0xDB: /* STP */ if (cpu->is_65c02) { tick1(cpu); cpu->stopped = true; } else tick1(cpu); break;
+
     /* ---- TSB/TRB (65C02) ---- */
     case 0x04: /* TSB zp */ if (cpu->is_65c02) {
         u16 a = zp(cpu);

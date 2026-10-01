@@ -1,6 +1,9 @@
 .PHONY
 *.o
 host/cpu/test_cpu
+host/cpu/test_runner
+host/cpu/test.lst
+host/cpu/test.bin
 host/machine/test_disk
 host/machine/test_mmu
 host/machine/test_disk_rwts

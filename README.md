@@ -7,15 +7,16 @@ Locked architecture decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md).
 ## Build
 
 ```bash
-make test-cpu       # host/cpu (TDD)
+make test-cpu       # host/cpu C smoke + asmx ISA vectors
 make test-machine   # host/machine (TDD)
 make test           # both
+make -C host/cpu vectors  # regenerate ISA vectors (needs asmx)
 make fetch-asimov   # optional: ROM+DOS into fixtures/asimov/ (gitignored)
 make test-boot-dos  # optional DOS cold-boot smoke (skips if no fixtures)
 make linux          # requires SDL2 (pkg-config sdl2)
 ```
 
-Process: [`PLAN.md`](PLAN.md), decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md) (**D13** TDD).
+Process: [`PLAN.md`](PLAN.md), decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md) (**D13** TDD, **D14** asm vectors). ISA harness: [`docs/asm_test_harness.md`](docs/asm_test_harness.md).
 
 ROMs/disks: [`docs/RESOURCES.md`](docs/RESOURCES.md) (6502.org, mirrors, `make fetch-asimov` — not bundled in repo).
 
@@ -35,7 +36,7 @@ Firmware and disk images are **not** included — see [`roms/README.md`](roms/RE
 | Path | Role |
 |------|------|
 | `core/` | 6502, IIe MMU/soft switches, Disk II, video state, machine |
-| `host/cpu/` | CPU unit tests (no SDL/IDF) |
+| `host/cpu/` | CPU C smoke + asmx ISA vectors (`test.asm`) |
 | `host/machine/` | MMU / Disk II / machine tests |
 | `host/linux/` | SDL2 display + keyboard |
 | `host/cyd/` | ESP32-2432S028R CYD stub (no PSRAM → reduced RAM/disk profile) |

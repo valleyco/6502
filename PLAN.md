@@ -33,10 +33,10 @@ core/            portable C11 — linked by all hosts
 D1–D13 locked. Harness: `make test-cpu` / `make test-machine` / `make test`.
 
 ### Step 1 — Cycle 6502/65C02 baseline
-**Status:** `done` (initial C coverage) · expand under TDD
+**Status:** `done` (initial C smoke) · ISA vectors in Step 8
 
-`core/cpu.c` + `host/cpu`. Next under TDD: broader opcode/cycle cases
-(optional YAML runner later).
+`core/cpu.c` + `host/cpu` C smoke tests. Broader opcode coverage via
+asmx-driven vectors (**D14**, Step 8) — same method as `8086pc`.
 
 ### Step 2 — IIe MMU / soft switches
 **Status:** `done` (initial) · harden under TDD for ProDOS banks
@@ -93,6 +93,27 @@ make test-machine   # includes test_video_rgb565 + test_disk_reduced
 make cyd-stub       # no IDF; exercises RGB565 present path
 # On device (ESP-IDF project wrapping host/cyd): copy ROM/disk to SD first
 ```
+
+### Step 8 — asmx ISA vector harness (D14)
+**Status:** `done` · 50 vectors green (`make test-cpu`)
+
+8086pc-style asm vectors for 6502/65C02:
+
+```text
+host/cpu/test.asm  (; @test / @init / @expect / @mem)
+    → asmx -C 65C02 -l -o -b
+    → test.bin + test.lst
+    → tools/gen_test_vectors.py
+    → host/cpu/test_vectors.bin
+    → host/cpu/test_runner
+```
+
+```bash
+make test-cpu              # C smoke + ISA vectors
+make -C host/cpu vectors   # regenerate (needs asmx on PATH)
+```
+
+Docs: [`docs/asm_test_harness.md`](docs/asm_test_harness.md).
 
 ---
 

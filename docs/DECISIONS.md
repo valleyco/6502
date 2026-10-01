@@ -16,7 +16,8 @@ Source of truth for architectural decisions. Change only by explicit re-lock.
 | D10 | **CPU:** 6502 (and //e 65C02 opcodes as needed for firmware) with **per-cycle** bus model (memory R/W each cycle) so Disk II stays in sync |
 | D11 | **Validation order:** CPU → MMU/soft switches → Disk II → boot DOS → ProDOS; UI polish last |
 | D12 | **Living plan:** [`PLAN.md`](../PLAN.md) is worked interactively (same style as invaders). Do not start a step until agreed. Update step status after each discussion. |
-| D13 | **TDD (locked):** same approach as `../esp32-invaders`. **Red → green → refactor.** New core behavior gets a failing host test **before** implementation. Harness layout: `host/cpu` (CPU), `host/machine` (MMU / Disk II / video / machine). Targets: `make test-cpu`, `make test-machine`, `make test`. No SDL/IDF inside those tests. Assert style mirrors invaders `test_assert.h`. CPU suite may grow a Python/YAML runner later (invaders D2=B); C tests are the baseline now. |
+| D13 | **TDD (locked):** same approach as `../esp32-invaders`. **Red → green → refactor.** New core behavior gets a failing host test **before** implementation. Harness layout: `host/cpu` (CPU), `host/machine` (MMU / Disk II / video / machine). Targets: `make test-cpu`, `make test-machine`, `make test`. No SDL/IDF inside those tests. Assert style mirrors invaders `test_assert.h`. |
+| D14 | **CPU ISA vectors (locked):** same method as `../8086pc/i8086` — author tests in `host/cpu/test.asm` with `; @test` / `@init` / `@expect` / `@mem` comment DSL; assemble with **asmx** (`-C 65C02`); `tools/gen_test_vectors.py` → `test_vectors.bin`; C `test_runner`. Halt = STP opcode `$DB` (`DB $DB` in asmx; mnemonic is 65C816-only there). Default profile **65C02** (IIe). Commit generated `test_vectors.bin` so `make test-cpu` runs without asmx; regenerate when `test.asm` changes. |
 
 ## Out of scope for v1
 
