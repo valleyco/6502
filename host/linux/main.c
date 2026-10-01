@@ -54,24 +54,50 @@ static u8 *load_file(const char *path, size_t *out_len) {
 
 static void usage(const char *argv0) {
     fprintf(stderr,
-        "Usage: %s [--rom PATH] [--disk PATH.dsk] [--bootrom PATH]\n"
-        "  ROMs are not redistributed; see roms/README.md\n"
-        "  Keys: Esc=quit, F5=reset, printable keys -> Apple keyboard\n",
+        "Usage: %s [options]\n"
+        "  --rom PATH       Apple IIe ROM (default: roms/apple2e.rom)\n"
+        "  --disk PATH      .dsk / .po image\n"
+        "  --bootrom PATH   Disk II P5 PROM (default: roms/diskii_boot.bin)\n"
+        "  --scale N        window scale factor 1..8 (default: 3)\n"
+        "  -h, --help       this help\n"
+        "\n"
+        "ROMs are not redistributed; see roms/README.md\n"
+        "Keys: Esc=quit, F5=reset, +/-=scale, printable -> Apple keyboard\n",
         argv0);
+}
+
+static int clamp_scale(int s) {
+    if (s < 1) return 1;
+    if (s > 8) return 8;
+    return s;
+}
+
+static void apply_scale(host_sdl *hs, int scale) {
+    hs->scale = clamp_scale(scale);
+    if (hs->win)
+        SDL_SetWindowSize(hs->win, A2E_VIDEO_W * hs->scale, A2E_VIDEO_H * hs->scale);
 }
 
 int main(int argc, char **argv) {
     const char *rom_path = "roms/apple2e.rom";
     const char *disk_path = NULL;
     const char *bootrom_path = "roms/diskii_boot.bin";
+    int scale = 3;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_path = argv[++i];
         else if (!strcmp(argv[i], "--disk") && i + 1 < argc) disk_path = argv[++i];
         else if (!strcmp(argv[i], "--bootrom") && i + 1 < argc) bootrom_path = argv[++i];
-        else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
+        else if (!strcmp(argv[i], "--scale") && i + 1 < argc) {
+            scale = atoi(argv[++i]);
+            scale = clamp_scale(scale);
+        } else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
             usage(argv[0]);
             return 0;
+        } else {
+            fprintf(stderr, "Unknown option: %s\n", argv[i]);
+            usage(argv[0]);
+            return 1;
         }
     }
 
@@ -79,16 +105,24 @@ int main(int argc, char **argv) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
+    /* Integer scale should stay crisp, not bilinear-blurred. */
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
 
     host_sdl host = {0};
-    host.scale = 3;
+    host.scale = scale;
     host.win = SDL_CreateWindow("Apple IIe",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        A2E_VIDEO_W * host.scale, A2E_VIDEO_H * host.scale, 0);
+        A2E_VIDEO_W * host.scale, A2E_VIDEO_H * host.scale,
+        SDL_WINDOW_RESIZABLE);
     host.ren = SDL_CreateRenderer(host.win, -1, SDL_RENDERER_ACCELERATED);
+    SDL_RenderSetLogicalSize(host.ren, A2E_VIDEO_W, A2E_VIDEO_H);
+    SDL_RenderSetIntegerScale(host.ren, SDL_TRUE);
     host.tex = SDL_CreateTexture(host.ren, SDL_PIXELFORMAT_ARGB8888,
                                  SDL_TEXTUREACCESS_STREAMING,
                                  A2E_VIDEO_W, A2E_VIDEO_H);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+    SDL_SetTextureScaleMode(host.tex, SDL_ScaleModeNearest);
+#endif
 
     a2e_host_ops ops = {
         .present = present,
@@ -154,7 +188,14 @@ int main(int argc, char **argv) {
             if (ev.type == SDL_KEYDOWN) {
                 if (ev.key.keysym.sym == SDLK_ESCAPE) running = 0;
                 else if (ev.key.keysym.sym == SDLK_F5) a2e_machine_reset(&mach);
-                else {
+                else if (ev.key.keysym.sym == SDLK_EQUALS ||
+                         ev.key.keysym.sym == SDLK_PLUS ||
+                         ev.key.keysym.sym == SDLK_KP_PLUS) {
+                    apply_scale(&host, host.scale + 1);
+                } else if (ev.key.keysym.sym == SDLK_MINUS ||
+                           ev.key.keysym.sym == SDLK_KP_MINUS) {
+                    apply_scale(&host, host.scale - 1);
+                } else {
                     char ch = 0;
                     SDL_Keycode k = ev.key.keysym.sym;
                     if (k >= 32 && k < 127) ch = (char)k;
