@@ -1,0 +1,24 @@
+.PHONY
+*.o
+host/cpu/test_cpu
+host/machine/test_disk
+host/machine/test_mmu
+host/machine/test_disk_rwts
+host/machine/test_disk_latch
+host/machine/test_disk_po
+host/machine/test_disk_reduced
+host/machine/test_video_rgb565
+host/machine/test_boot
+host/machine/test_boot_dos
+host/machine/test_boot_prodos
+host/linux/a2e
+host/cyd/a2e_cyd_stub
+tests/test_core
+roms/diskii_boot_cleanroom.bin
+roms/*.rom
+roms/*.bin
+disks/*.dsk
+disks/*.po
+disks/*.nib
+# Asimov / local copyrighted fixtures (never commit)
+fixtures/
