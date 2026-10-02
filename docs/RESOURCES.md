@@ -50,6 +50,27 @@ Downloads from the Asimov HTTP mirror (default `mirrors.apple2.org.za`):
 
 Also copies into `roms/` / `disks/` for `./host/linux/a2e`. Override mirror with `ASIMOV_MIRROR=...`.
 
+| Local file | Source |
+|------------|--------|
+| `fixtures/asimov/invaders.dsk` | `images/games/file_based/appleinvaders_keyboard…superinvader.dsk` |
+
+### Graphic game smoke (Step 10)
+
+```bash
+make fetch-asimov
+make linux
+./host/linux/a2e --rom roms/apple2e.rom --disk disks/invaders.dsk
+make test-boot-invaders   # optional headless smoke
+```
+
+On the CAT menu: press **E** (exit to BASIC), then:
+
+```text
+RUN KEYBOARD APPLE INVADERS
+```
+
+Controls (also arrow keys / Ctrl on the Linux host): **D** left, **F** right, **J** fire, **Space** start. Sound not implemented.
+
 ## Tools to create images you own
 
 | Tool | URL | Role |

@@ -8,6 +8,7 @@ idf_component_register(
          "../../core/mmu.c"
          "../../core/disk.c"
          "../../core/video.c"
+         "../../core/audio.c"
          "../../core/machine.c"
     INCLUDE_DIRS "." "main" "../../core"
     REQUIRES driver esp_lcd fatfs

@@ -98,11 +98,23 @@ static void test_machine_reset_vector(void) {
     ASSERT_TRUE(m.cpu.pc == 0x8002 || m.cpu.pc == 0x8003 || m.cpu.pc == 0x8004);
 }
 
+static void test_paddle_timer(void) {
+    a2e_machine m;
+    a2e_machine_init(&m, NULL);
+    a2e_mmu_set_paddles(&m.mmu, 10, 128, 128, 128, 0);
+    m.cpu.cycles = 1000;
+    (void)a2e_mmu_read(&m.mmu, 0xC070);
+    ASSERT_TRUE(a2e_mmu_read(&m.mmu, 0xC064) & 0x80);
+    m.cpu.cycles = 1000 + 10 * 11 + 1;
+    ASSERT_TRUE(!(a2e_mmu_read(&m.mmu, 0xC064) & 0x80));
+}
+
 int main(void) {
     test_mmu_ram();
     test_prodos_banking();
     test_lc_bank1_bank2_isolated();
     test_lc_prewrite_needs_two_odds();
     test_machine_reset_vector();
+    test_paddle_timer();
     return test_report();
 }

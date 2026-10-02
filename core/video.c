@@ -178,12 +178,49 @@ static void pixel_hires(a2e_mmu *m, int x, int y, u8 *r, u8 *g, u8 *b) {
     *r = *g = *b = on ? 255 : 0;
 }
 
+static void pixel_lores(a2e_mmu *m, int x, int y, u8 *r, u8 *g, u8 *b) {
+    /* Apple II lores palette (approx RGB, not NTSC artifact) */
+    static const u8 PAL[16][3] = {
+        {0x00, 0x00, 0x00}, {0x90, 0x17, 0x40}, {0x40, 0x2c, 0xa5}, {0xd0, 0x43, 0xe5},
+        {0x00, 0x69, 0x40}, {0x80, 0x80, 0x80}, {0x2f, 0x95, 0xe5}, {0xbf, 0xab, 0xff},
+        {0x40, 0x54, 0x00}, {0xd0, 0x6a, 0x1a}, {0x80, 0x80, 0x80}, {0xff, 0x96, 0xbf},
+        {0x2f, 0xbc, 0x1a}, {0xbf, 0xd3, 0x5a}, {0x6f, 0xe8, 0xbf}, {0xff, 0xff, 0xff},
+    };
+    static const u16 LINE[24] = {
+        0x000,0x080,0x100,0x180,0x200,0x280,0x300,0x380,
+        0x028,0x0A8,0x128,0x1A8,0x228,0x2A8,0x328,0x3A8,
+        0x050,0x0D0,0x150,0x1D0,0x250,0x2D0,0x350,0x3D0
+    };
+    int col = x / 7;
+    int text_row = y / 8;
+    if (col < 0 || col >= 40 || text_row < 0 || text_row >= 24) {
+        *r = *g = *b = 0;
+        return;
+    }
+    u16 addr = (u16)(0x400 + LINE[text_row] + col);
+    u8 *ram = (m->store80 && m->page2) ? m->aux : m->main;
+    if (m->page2 && !m->store80) addr = (u16)(0x800 + LINE[text_row] + col);
+    u8 cell = ram[addr];
+    int color = ((y & 7) < 4) ? (cell & 0x0F) : ((cell >> 4) & 0x0F);
+    *r = PAL[color][0];
+    *g = PAL[color][1];
+    *b = PAL[color][2];
+}
+
+static void pixel_at(a2e_mmu *m, int x, int y, u8 *r, u8 *g, u8 *b) {
+    if (m->text_mode || (m->mixed && y >= 160))
+        pixel_text(m, x, y, r, g, b);
+    else if (m->hires)
+        pixel_hires(m, x, y, r, g, b);
+    else
+        pixel_lores(m, x, y, r, g, b);
+}
+
 void a2e_video_render_row_rgb565(a2e_mmu *m, int y, u16 *out) {
     if (!m || !out || y < 0 || y >= A2E_VIDEO_H) return;
     for (int x = 0; x < A2E_VIDEO_W; x++) {
         u8 r, g, b;
-        if (m->hires) pixel_hires(m, x, y, &r, &g, &b);
-        else pixel_text(m, x, y, &r, &g, &b);
+        pixel_at(m, x, y, &r, &g, &b);
         out[x] = a2e_rgb_to_565(r, g, b);
     }
 }
@@ -199,23 +236,13 @@ void a2e_video_cyd_panel_row(a2e_mmu *m, int panel_y, u16 *out) {
 }
 
 void a2e_video_render(a2e_video *v, a2e_mmu *m) {
-    /* Simplified RGB text/hires (D5) — no NTSC artifact color */
+    /* Simplified RGB text/lores/hires (D5) — no NTSC artifact color */
 #ifndef A2E_REDUCED_VIDEO
-    if (m->hires) {
-        for (int y = 0; y < 192; y++) {
-            for (int x = 0; x < A2E_VIDEO_W; x++) {
-                u8 r, g, b;
-                pixel_hires(m, x, y, &r, &g, &b);
-                plot(v, x, y, r, g, b);
-            }
-        }
-    } else {
-        for (int y = 0; y < A2E_VIDEO_H; y++) {
-            for (int x = 0; x < A2E_VIDEO_W; x++) {
-                u8 r, g, b;
-                pixel_text(m, x, y, &r, &g, &b);
-                plot(v, x, y, r, g, b);
-            }
+    for (int y = 0; y < A2E_VIDEO_H; y++) {
+        for (int x = 0; x < A2E_VIDEO_W; x++) {
+            u8 r, g, b;
+            pixel_at(m, x, y, &r, &g, &b);
+            plot(v, x, y, r, g, b);
         }
     }
 #else

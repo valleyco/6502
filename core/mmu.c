@@ -1,6 +1,7 @@
 #include "mmu.h"
 #include "disk.h"
 #include "video.h"
+#include "audio.h"
 #include "machine.h"
 #include <string.h>
 
@@ -10,7 +11,15 @@ void a2e_mmu_init(a2e_mmu *m, u8 *main, u8 *aux, u8 *rom_c000) {
     m->aux = aux;
     m->rom_d000 = rom_c000; /* full 16K from $C000 */
     m->rom_c100 = rom_c000;
-    m->intcxrom = true;
+    /* Slot cards (Disk II at $C600) need INTCXROM off after cold boot. */
+    m->intcxrom = false;
+    m->text_mode = true;
+    m->mixed = false;
+    m->hires = false;
+    m->page2 = false;
+    m->paddle[0] = m->paddle[1] = m->paddle[2] = m->paddle[3] = 128;
+    m->paddle_btn = 0;
+    m->paddle_reset_cyc = 0;
     m->lcram = false;
     m->lcram2 = true;
     m->lcwrite = false;
@@ -18,6 +27,18 @@ void a2e_mmu_init(a2e_mmu *m, u8 *main, u8 *aux, u8 *rom_c000) {
 
 void a2e_mmu_key_press(a2e_mmu *m, u8 ascii) {
     m->kbd = (u8)(ascii | 0x80);
+}
+
+void a2e_mmu_set_paddles(a2e_mmu *m, u8 p0, u8 p1, u8 p2, u8 p3, u8 btn_mask) {
+    m->paddle[0] = p0;
+    m->paddle[1] = p1;
+    m->paddle[2] = p2;
+    m->paddle[3] = p3;
+    m->paddle_btn = (u8)(btn_mask & 7);
+}
+
+static u64 mmu_cycles(a2e_mmu *m) {
+    return (m->mach) ? m->mach->cpu.cycles : 0;
 }
 
 static u8 *lc_bank_ptr(a2e_mmu *m, u16 addr, bool write) {
@@ -135,16 +156,47 @@ u8 a2e_mmu_read(a2e_mmu *m, u16 addr) {
         case 0xC016: return (u8)(m->altzp ? 0x80 : 0x00);
         case 0xC017: return (u8)(m->slotc3rom ? 0x80 : 0x00);
         case 0xC018: return (u8)(m->store80 ? 0x80 : 0x00);
-        case 0xC01A: return (u8)(m->page2 ? 0x80 : 0x00);
-        case 0xC01B: return (u8)(m->hires ? 0x80 : 0x00);
-        case 0xC030: m->speaker_level = !m->speaker_level; return 0;
-        case 0xC050: if (m->video) m->video->dirty = true; return 0;
-        case 0xC051: if (m->video) m->video->dirty = true; return 0;
-        case 0xC052: case 0xC053: return 0;
+        /* IIe video status: TEXT / MIXED / PAGE2 / HIRES */
+        case 0xC01A: return (u8)(m->text_mode ? 0x80 : 0x00);
+        case 0xC01B: return (u8)(m->mixed ? 0x80 : 0x00);
+        case 0xC01C: return (u8)(m->page2 ? 0x80 : 0x00);
+        case 0xC01D: return (u8)(m->hires ? 0x80 : 0x00);
+        case 0xC019: {
+            /* Approximate NTSC VBL: bit7 set in last ~1/4 of 17030-cycle frame */
+            u64 in_frame = mmu_cycles(m) % 17030ull;
+            return (u8)(in_frame >= 12480ull ? 0x80 : 0x00);
+        }
+        case 0xC030:
+            m->speaker_level = !m->speaker_level;
+            if (m->mach)
+                a2e_audio_speaker_toggle(&m->mach->audio, mmu_cycles(m), m->speaker_level);
+            return 0;
+        case 0xC061: case 0xC062: case 0xC063:
+            /*
+             * Paddle buttons: real HW has bit7 clear when pressed.
+             * Returning 0x80 (released) breaks this disk's CAT menu /
+             * DOS warmstart on our bus; keep 0 for v1 open-bus compat.
+             * Position timers ($C064-$C067) still work for paddle games.
+             */
+            (void)a;
+            return 0;
+        case 0xC064: case 0xC065: case 0xC066: case 0xC067: {
+            int i = (int)(a - 0xC064);
+            u64 elapsed = mmu_cycles(m) - m->paddle_reset_cyc;
+            u64 thresh = (u64)m->paddle[i] * 11ull;
+            return (u8)(elapsed < thresh ? 0x80 : 0x00);
+        }
+        case 0xC070:
+            m->paddle_reset_cyc = mmu_cycles(m);
+            return 0;
+        case 0xC050: m->text_mode = false; if (m->video) m->video->dirty = true; return 0;
+        case 0xC051: m->text_mode = true;  if (m->video) m->video->dirty = true; return 0;
+        case 0xC052: m->mixed = false;     if (m->video) m->video->dirty = true; return 0;
+        case 0xC053: m->mixed = true;      if (m->video) m->video->dirty = true; return 0;
         case 0xC054: m->page2 = false; if (m->video) m->video->dirty = true; return 0;
-        case 0xC055: m->page2 = true; if (m->video) m->video->dirty = true; return 0;
+        case 0xC055: m->page2 = true;  if (m->video) m->video->dirty = true; return 0;
         case 0xC056: m->hires = false; if (m->video) m->video->dirty = true; return 0;
-        case 0xC057: m->hires = true; if (m->video) m->video->dirty = true; return 0;
+        case 0xC057: m->hires = true;  if (m->video) m->video->dirty = true; return 0;
         default:
             break;
         }
@@ -203,15 +255,20 @@ void a2e_mmu_write(a2e_mmu *m, u16 addr, u8 val) {
         case 0xC00A: case 0xC00B:
             m->slotc3rom = (addr & 1) != 0; break;
         case 0xC010: m->kbd &= 0x7F; break;
-        case 0xC030: m->speaker_level = !m->speaker_level; break;
-        case 0xC050: case 0xC051:
-        case 0xC052: case 0xC053:
-            if (m->video) { m->video->dirty = true; }
+        case 0xC030:
+            m->speaker_level = !m->speaker_level;
+            if (m->mach)
+                a2e_audio_speaker_toggle(&m->mach->audio, mmu_cycles(m), m->speaker_level);
             break;
+        case 0xC070: m->paddle_reset_cyc = mmu_cycles(m); break;
+        case 0xC050: m->text_mode = false; if (m->video) m->video->dirty = true; break;
+        case 0xC051: m->text_mode = true;  if (m->video) m->video->dirty = true; break;
+        case 0xC052: m->mixed = false;     if (m->video) m->video->dirty = true; break;
+        case 0xC053: m->mixed = true;      if (m->video) m->video->dirty = true; break;
         case 0xC054: m->page2 = false; if (m->video) m->video->dirty = true; break;
-        case 0xC055: m->page2 = true; if (m->video) m->video->dirty = true; break;
+        case 0xC055: m->page2 = true;  if (m->video) m->video->dirty = true; break;
         case 0xC056: m->hires = false; if (m->video) m->video->dirty = true; break;
-        case 0xC057: m->hires = true; if (m->video) m->video->dirty = true; break;
+        case 0xC057: m->hires = true;  if (m->video) m->video->dirty = true; break;
         default:
             if (addr >= 0xC0E0 && addr <= 0xC0EF && m->disk)
                 a2e_disk_softswitch_write(m->disk, addr, val);

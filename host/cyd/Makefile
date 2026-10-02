@@ -12,6 +12,7 @@ SRCS := \
 	$(ROOT)/core/mmu.c \
 	$(ROOT)/core/disk.c \
 	$(ROOT)/core/video.c \
+	$(ROOT)/core/audio.c \
 	$(ROOT)/core/machine.c
 
 .PHONY: all clean run

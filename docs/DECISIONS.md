@@ -18,6 +18,7 @@ Source of truth for architectural decisions. Change only by explicit re-lock.
 | D12 | **Living plan:** [`PLAN.md`](../PLAN.md) is worked interactively (same style as invaders). Do not start a step until agreed. Update step status after each discussion. |
 | D13 | **TDD (locked):** same approach as `../esp32-invaders`. **Red → green → refactor.** New core behavior gets a failing host test **before** implementation. Harness layout: `host/cpu` (CPU), `host/machine` (MMU / Disk II / video / machine). Targets: `make test-cpu`, `make test-machine`, `make test`. No SDL/IDF inside those tests. Assert style mirrors invaders `test_assert.h`. |
 | D14 | **CPU ISA vectors (locked):** same method as `../8086pc/i8086` — author tests in `host/cpu/test.asm` with `; @test` / `@init` / `@expect` / `@mem` comment DSL; assemble with **asmx** (`-C 65C02`); `tools/gen_test_vectors.py` → `test_vectors.bin`; C `test_runner`. Halt = STP opcode `$DB` (`DB $DB` in asmx; mnemonic is 65C816-only there). Default profile **65C02** (IIe). Commit generated `test_vectors.bin` so `make test-cpu` runs without asmx; regenerate when `test.asm` changes. |
+| D15 | **Audio (locked):** Linux host uses **SDL2 audio**. Primary path = Apple **1-bit speaker** (`$C030` toggles → PCM). **Disk II drive sound:** deferred — placeholder synth (noise + clicks) is not realistic; `disk_fx` stays **off** unless we add samples or proper modeling later. No Mockingboard in v1. |
 
 ## Out of scope for v1
 

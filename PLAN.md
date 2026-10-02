@@ -115,6 +115,46 @@ make -C host/cpu vectors   # regenerate (needs asmx on PATH)
 
 Docs: [`docs/asm_test_harness.md`](docs/asm_test_harness.md).
 
+### Step 9 — Video modes (TEXT / GR / MIXED / lores)
+**Status:** `done` · `test_video_modes` green
+
+Soft-switch–driven display modes so BASIC `GR` / `HGR` / `TEXT` work:
+
+- Track **TEXT**, **MIXED**, **PAGE2**, **HIRES** (IIe status at `$C01A`–`$C01D`)
+- Wire `$C050`–`$C057` on read and write
+- **Lores** RGB renderer + mixed bottom-4 text rows
+- TDD: `test_video_modes` + MMU status asserts
+
+```bash
+make test-machine   # includes test_video_modes
+```
+
+### Step 10 — Graphic game smoke (Asimov invaders)
+**Status:** `done` · boots to HIRES playfield (`make test-boot-invaders`)
+
+Keyboard invaders compilation from Asimov (`disks/invaders.dsk`, gitignored).
+
+```bash
+make fetch-asimov
+./host/linux/a2e --rom roms/apple2e.rom --disk disks/invaders.dsk
+# CAT menu → E → RUN KEYBOARD APPLE INVADERS → Space
+make test-boot-invaders
+```
+
+Also: paddle position timers + VBL `$C019`; button soft-switches still
+open-bus `0` (returning released `0x80` broke this disk’s menu).
+
+### Step 11 — SDL audio (speaker + disk FX)
+**Status:** `done`
+
+**D15:** `$C030` speaker → PCM on Linux SDL2. Disk drive FX code remains but **`disk_fx` default off** (synth not faithful).
+
+```bash
+make linux
+./host/linux/a2e --rom roms/apple2e.rom --disk disks/invaders.dsk
+# speaker beeps; no drive whir unless disk_fx enabled in code
+```
+
 ---
 
 ## Make cheat sheet

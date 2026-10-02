@@ -25,9 +25,12 @@ ROMs/disks: [`docs/RESOURCES.md`](docs/RESOURCES.md) (6502.org, mirrors, `make f
 ```bash
 ./host/linux/a2e --rom roms/apple2e.rom --disk disks/dos33.dsk
 ./host/linux/a2e --scale 4 --rom roms/apple2e.rom --disk disks/dos33.dsk
+./host/linux/a2e --rom roms/apple2e.rom --disk disks/invaders.dsk
 ```
 
-`--scale N` sets the window to N×280×192 (1–8, default 3). `+` / `-` change scale while running.
+`--scale N` sets the window to N×280×192 (1–8, default 3). **Ctrl++** / **Ctrl+-** change scale while running.
+
+Invaders disk (after `make fetch-asimov`): CAT menu → **E** → `RUN KEYBOARD APPLE INVADERS` → Space. Letters are forced uppercase. Keys **D/F/J** (arrows aliased).
 
 Firmware and disk images are **not** included — see [`roms/README.md`](roms/README.md).
 

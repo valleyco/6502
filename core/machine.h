@@ -7,6 +7,7 @@
 #include "mmu.h"
 #include "disk.h"
 #include "video.h"
+#include "audio.h"
 #include "host.h"
 
 typedef struct a2e_machine {
@@ -15,6 +16,7 @@ typedef struct a2e_machine {
     a2e_mmu   mmu;
     a2e_disk  disk;
     a2e_video video;
+    a2e_audio audio;
     u8        main_ram[65536];
     u8        aux_ram[65536];
     u8        rom[16384];      /* $C000-$FFFF image (16K); unused low 256 of CX */

@@ -26,6 +26,7 @@ void a2e_machine_init(a2e_machine *m, const a2e_host_ops *host) {
     if (host) m->host = *host;
     a2e_disk_init(&m->disk);
     a2e_video_init(&m->video);
+    a2e_audio_init(&m->audio);
     a2e_mmu_init(&m->mmu, m->main_ram, m->aux_ram, m->rom);
     m->mmu.disk = &m->disk;
     m->mmu.video = &m->video;
@@ -100,6 +101,8 @@ int a2e_machine_load_disk_po(a2e_machine *m, const u8 *po, size_t len) {
 }
 
 void a2e_machine_reset(a2e_machine *m) {
+    /* Match cold boot: expose slot ROMs so Disk II can autostart. */
+    m->mmu.intcxrom = false;
     a2e_cpu_reset(&m->cpu);
 }
 
@@ -109,6 +112,15 @@ void a2e_machine_run_cycles(a2e_machine *m, u64 cycles) {
 
 void a2e_machine_run_frame(a2e_machine *m) {
     a2e_cpu_run(&m->cpu, m->frame_cycles);
+
+    a2e_audio_disk_poll(&m->audio, m->disk.motor_on, m->disk.half_track);
+    if (m->host.audio_push) {
+        i16 pcm[1024];
+        int n = a2e_audio_render(&m->audio, m->cpu.cycles, pcm, 1024);
+        if (n > 0)
+            m->host.audio_push(m->host.ctx, pcm, n);
+    }
+
     if (m->host.present_rgb565_row) {
         u16 row[A2E_CYD_PANEL_W];
         for (int y = 0; y < A2E_CYD_PANEL_H; y++) {

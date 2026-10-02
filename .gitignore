@@ -11,9 +11,12 @@ host/machine/test_disk_latch
 host/machine/test_disk_po
 host/machine/test_disk_reduced
 host/machine/test_video_rgb565
+host/machine/test_video_modes
+host/machine/test_audio
 host/machine/test_boot
 host/machine/test_boot_dos
 host/machine/test_boot_prodos
+host/machine/test_boot_invaders
 host/linux/a2e
 host/cyd/a2e_cyd_stub
 tests/test_core

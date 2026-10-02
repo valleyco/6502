@@ -3,10 +3,10 @@ CC      ?= gcc
 CFLAGS  ?= -std=c11 -Wall -Wextra -O2 -g -Icore
 LDFLAGS ?=
 
-CORE_SRCS = core/cpu.c core/mmu.c core/disk.c core/video.c core/machine.c
+CORE_SRCS = core/cpu.c core/mmu.c core/disk.c core/video.c core/audio.c core/machine.c
 CORE_OBJS = $(CORE_SRCS:.c=.o)
 
-.PHONY: all clean test test-cpu test-machine test-boot-dos test-boot-prodos fetch-asimov linux cyd-stub
+.PHONY: all clean test test-cpu test-machine test-boot-dos test-boot-prodos test-boot-invaders fetch-asimov linux cyd-stub
 
 all: test linux
 
@@ -31,6 +31,9 @@ test-boot-dos:
 
 test-boot-prodos:
 	$(MAKE) -C host/machine test-boot-prodos
+
+test-boot-invaders:
+	$(MAKE) -C host/machine test-boot-invaders
 
 # CYD host desktop stub (RGB565 rows + reduced disk; no ESP-IDF)
 cyd-stub:

@@ -9,6 +9,7 @@ typedef struct {
     SDL_Window *win;
     SDL_Renderer *ren;
     SDL_Texture *tex;
+    SDL_AudioDeviceID audio_dev;
     int scale;
 } host_sdl;
 
@@ -33,6 +34,15 @@ static void present(void *ctx, const u8 *rgb, int w, int h, int stride_bytes) {
     SDL_RenderClear(hs->ren);
     SDL_RenderCopy(hs->ren, hs->tex, NULL, NULL);
     SDL_RenderPresent(hs->ren);
+}
+
+static void audio_push(void *ctx, const i16 *samples, int count) {
+    host_sdl *hs = ctx;
+    if (!hs->audio_dev || !samples || count <= 0) return;
+    /* Drop if queue is huge (slow host) to avoid latency blow-up. */
+    if (SDL_GetQueuedAudioSize(hs->audio_dev) > 64 * 1024)
+        SDL_ClearQueuedAudio(hs->audio_dev);
+    SDL_QueueAudio(hs->audio_dev, samples, (Uint32)(count * (int)sizeof(i16)));
 }
 
 static u8 *load_file(const char *path, size_t *out_len) {
@@ -62,7 +72,9 @@ static void usage(const char *argv0) {
         "  -h, --help       this help\n"
         "\n"
         "ROMs are not redistributed; see roms/README.md\n"
-        "Keys: Esc=quit, F5=reset, +/-=scale, printable -> Apple keyboard\n",
+        "Keys: Esc=quit, F5=reset, Ctrl++/Ctrl+-=scale; letters forced UPPERCASE\n"
+        "      Shift+number for !@#…; arrows alias D/F/J for invaders\n"
+        "Audio: 1-bit speaker ($C030) + synth Disk II whir/clicks\n",
         argv0);
 }
 
@@ -76,6 +88,10 @@ static void apply_scale(host_sdl *hs, int scale) {
     hs->scale = clamp_scale(scale);
     if (hs->win)
         SDL_SetWindowSize(hs->win, A2E_VIDEO_W * hs->scale, A2E_VIDEO_H * hs->scale);
+}
+
+static int ctrl_held(void) {
+    return (SDL_GetModState() & KMOD_CTRL) != 0;
 }
 
 int main(int argc, char **argv) {
@@ -101,7 +117,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
@@ -124,8 +140,23 @@ int main(int argc, char **argv) {
     SDL_SetTextureScaleMode(host.tex, SDL_ScaleModeNearest);
 #endif
 
+    {
+        SDL_AudioSpec want, have;
+        SDL_zero(want);
+        want.freq = A2E_AUDIO_RATE;
+        want.format = AUDIO_S16SYS;
+        want.channels = 1;
+        want.samples = 512;
+        host.audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+        if (host.audio_dev)
+            SDL_PauseAudioDevice(host.audio_dev, 0);
+        else
+            fprintf(stderr, "Warning: SDL audio unavailable (%s)\n", SDL_GetError());
+    }
+
     a2e_host_ops ops = {
         .present = present,
+        .audio_push = audio_push,
         .ctx = &host,
     };
 
@@ -177,6 +208,7 @@ int main(int argc, char **argv) {
     }
 
     a2e_machine_reset(&mach);
+    SDL_StartTextInput();
 
     int running = 1;
     Uint32 frame_ms = 16; /* ~60 Hz present; core runs ~1 NTSC frame worth of cycles */
@@ -185,24 +217,41 @@ int main(int argc, char **argv) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) running = 0;
-            if (ev.type == SDL_KEYDOWN) {
-                if (ev.key.keysym.sym == SDLK_ESCAPE) running = 0;
-                else if (ev.key.keysym.sym == SDLK_F5) a2e_machine_reset(&mach);
-                else if (ev.key.keysym.sym == SDLK_EQUALS ||
-                         ev.key.keysym.sym == SDLK_PLUS ||
-                         ev.key.keysym.sym == SDLK_KP_PLUS) {
-                    apply_scale(&host, host.scale + 1);
-                } else if (ev.key.keysym.sym == SDLK_MINUS ||
-                           ev.key.keysym.sym == SDLK_KP_MINUS) {
-                    apply_scale(&host, host.scale - 1);
-                } else {
-                    char ch = 0;
-                    SDL_Keycode k = ev.key.keysym.sym;
-                    if (k >= 32 && k < 127) ch = (char)k;
-                    if (k == SDLK_RETURN) ch = '\r';
-                    if (k == SDLK_BACKSPACE) ch = 0x08;
-                    if (ch) a2e_machine_key(&mach, (u8)ch);
+            else if (ev.type == SDL_TEXTINPUT) {
+                /* Apple II / DOS / Applesoft expect uppercase letters. */
+                for (const char *p = ev.text.text; *p; p++) {
+                    unsigned char ch = (unsigned char)*p;
+                    if (ch >= 'a' && ch <= 'z')
+                        ch = (unsigned char)(ch - 'a' + 'A');
+                    if (ch >= 32 && ch < 127)
+                        a2e_machine_key(&mach, ch);
                 }
+            } else if (ev.type == SDL_KEYDOWN) {
+                SDL_Keycode k = ev.key.keysym.sym;
+                if (k == SDLK_ESCAPE) {
+                    running = 0;
+                } else if (k == SDLK_F5) {
+                    a2e_machine_reset(&mach);
+                } else if (ctrl_held() &&
+                           (k == SDLK_EQUALS || k == SDLK_PLUS || k == SDLK_KP_PLUS)) {
+                    apply_scale(&host, host.scale + 1);
+                } else if (ctrl_held() &&
+                           (k == SDLK_MINUS || k == SDLK_KP_MINUS || k == SDLK_UNDERSCORE)) {
+                    apply_scale(&host, host.scale - 1);
+                } else if (k == SDLK_LEFT) {
+                    a2e_machine_key(&mach, 'D');
+                } else if (k == SDLK_RIGHT) {
+                    a2e_machine_key(&mach, 'F');
+                } else if (k == SDLK_UP) {
+                    a2e_machine_key(&mach, 'J');
+                } else if (k == SDLK_RETURN) {
+                    a2e_machine_key(&mach, '\r');
+                } else if (k == SDLK_BACKSPACE) {
+                    a2e_machine_key(&mach, 0x08);
+                } else if (k == SDLK_TAB) {
+                    a2e_machine_key(&mach, '\t');
+                }
+                /* Printable ASCII (incl. Shift+1 → '!') comes from SDL_TEXTINPUT */
             }
         }
         a2e_machine_run_frame(&mach);
@@ -210,6 +259,9 @@ int main(int argc, char **argv) {
         if (dt < frame_ms) SDL_Delay(frame_ms - dt);
     }
 
+    SDL_StopTextInput();
+    if (host.audio_dev)
+        SDL_CloseAudioDevice(host.audio_dev);
     SDL_DestroyTexture(host.tex);
     SDL_DestroyRenderer(host.ren);
     SDL_DestroyWindow(host.win);
